@@ -1,56 +1,71 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 const SB_URL = 'https://hcmpjrqpjohksoznoycq.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjbXBqcnFwam9oa3Nvem5veWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5OTk0NjAsImV4cCI6MjA4ODU3NTQ2MH0.XRWi4ZULpICkTucXgGVQCP5wq1RmVwOFWTdMrOEMDnw';
 const STORAGE_URL = `${SB_URL}/storage/v1/object`;
 
-const headers = {
+// Read headers (anon key — works with public SELECT policy)
+const readHeaders = {
   apikey: SB_KEY,
   Authorization: `Bearer ${SB_KEY}`,
   'Content-Type': 'application/json',
-  Prefer: 'return=representation',
 };
 
+// Write headers need the user's JWT token for RLS authenticated policies
+function authHeaders(token) {
+  return {
+    apikey: SB_KEY,
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  };
+}
+
 async function sbGet(path) {
-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers });
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: readHeaders });
   const data = await r.json();
   return Array.isArray(data) ? data : [];
 }
 
-async function sbPost(path, body) {
+async function sbPost(path, body, token) {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method: 'POST',
-    headers,
+    headers: authHeaders(token),
     body: JSON.stringify(body),
   });
-  return r.json();
+  const data = await r.json();
+  if (!r.ok) console.error('sbPost error:', r.status, data);
+  return data;
 }
 
-async function sbPatch(path, body) {
+async function sbPatch(path, body, token) {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method: 'PATCH',
-    headers,
+    headers: authHeaders(token),
     body: JSON.stringify(body),
   });
-  return r.json();
+  const data = await r.json();
+  if (!r.ok) console.error('sbPatch error:', r.status, data);
+  return data;
 }
 
-async function sbDelete(path) {
+async function sbDelete(path, token) {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method: 'DELETE',
-    headers,
+    headers: authHeaders(token),
   });
+  if (!r.ok) console.error('sbDelete error:', r.status);
   return r.ok;
 }
 
-export async function uploadPropertyImage(propertyId, file) {
+export async function uploadPropertyImage(propertyId, file, token) {
   const ext = file.name.split('.').pop();
   const fileName = `${propertyId}/${Date.now()}.${ext}`;
   const r = await fetch(`${STORAGE_URL}/property-images/${fileName}`, {
     method: 'POST',
     headers: {
       apikey: SB_KEY,
-      Authorization: `Bearer ${SB_KEY}`,
+      Authorization: `Bearer ${token || SB_KEY}`,
       'Content-Type': file.type,
     },
     body: file,
@@ -59,14 +74,14 @@ export async function uploadPropertyImage(propertyId, file) {
   return `${STORAGE_URL}/public/property-images/${fileName}`;
 }
 
-export async function deletePropertyImage(url) {
+export async function deletePropertyImage(url, token) {
   const path = url.split('/property-images/')[1];
   if (!path) return;
   await fetch(`${STORAGE_URL}/property-images/${path}`, {
     method: 'DELETE',
     headers: {
       apikey: SB_KEY,
-      Authorization: `Bearer ${SB_KEY}`,
+      Authorization: `Bearer ${token || SB_KEY}`,
     },
   });
 }
@@ -83,6 +98,14 @@ export function useProperties(session) {
     priceMax: '',
     sortBy: 'created_at_desc',
   });
+
+  // Keep a ref to the latest token so callbacks always use the fresh value
+  const tokenRef = useRef(null);
+  useEffect(() => {
+    tokenRef.current = session?.access_token || null;
+  }, [session]);
+
+  const getToken = () => tokenRef.current || SB_KEY;
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -137,7 +160,7 @@ export function useProperties(session) {
   }, [properties]);
 
   const createProperty = useCallback(async (data) => {
-    const result = await sbPost('properties', data);
+    const result = await sbPost('properties', data, getToken());
     if (Array.isArray(result) && result[0]) {
       setProperties(prev => [result[0], ...prev]);
       return result[0];
@@ -146,7 +169,7 @@ export function useProperties(session) {
   }, []);
 
   const updateProperty = useCallback(async (id, data) => {
-    const result = await sbPatch(`properties?id=eq.${id}`, data);
+    const result = await sbPatch(`properties?id=eq.${id}`, data, getToken());
     if (Array.isArray(result) && result[0]) {
       setProperties(prev => prev.map(p => p.id === id ? result[0] : p));
       return result[0];
@@ -155,7 +178,7 @@ export function useProperties(session) {
   }, []);
 
   const deleteProperty = useCallback(async (id) => {
-    const ok = await sbDelete(`properties?id=eq.${id}`);
+    const ok = await sbDelete(`properties?id=eq.${id}`, getToken());
     if (ok) setProperties(prev => prev.filter(p => p.id !== id));
     return ok;
   }, []);
@@ -169,6 +192,6 @@ export function useProperties(session) {
   return {
     properties, filtered, isLoading, kpis, filters, setFilters,
     createProperty, updateProperty, deleteProperty, duplicateProperty,
-    reload: load,
+    reload: load, getToken,
   };
 }

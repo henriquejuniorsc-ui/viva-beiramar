@@ -48,7 +48,7 @@ function SectionHeader({ title, open, toggle }) {
   );
 }
 
-export default function PropertyFormModal({ property, onClose, onCreate, onUpdate, onDelete, reload }) {
+export default function PropertyFormModal({ property, onClose, onCreate, onUpdate, onDelete, reload, getToken }) {
   const isEdit = !!property;
   const [form, setForm] = useState({
     title: property?.title || '',
@@ -134,7 +134,7 @@ export default function PropertyFormModal({ property, onClose, onCreate, onUpdat
     const newUrls = [];
     for (let i = 0; i < toUpload.length; i++) {
       try {
-        const url = await uploadPropertyImage(propId, toUpload[i]);
+        const url = await uploadPropertyImage(propId, toUpload[i], getToken?.());
         newUrls.push(url);
       } catch (e) { console.error('Upload failed:', e); }
       setUploadProgress(Math.round(((i + 1) / toUpload.length) * 100));
@@ -146,7 +146,7 @@ export default function PropertyFormModal({ property, onClose, onCreate, onUpdat
   const removePhoto = (idx) => {
     const url = form.images[idx];
     setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
-    deletePropertyImage(url).catch(() => {});
+    deletePropertyImage(url, getToken?.()).catch(() => {});
   };
 
   const movePhoto = (from, to) => {

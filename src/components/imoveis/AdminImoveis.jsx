@@ -176,7 +176,7 @@ function parseCSV(text) {
 export default function AdminImoveis({ session }) {
   const {
     filtered, isLoading, kpis, filters, setFilters,
-    createProperty, updateProperty, deleteProperty, duplicateProperty, reload,
+    createProperty, updateProperty, deleteProperty, duplicateProperty, reload, getToken,
   } = useProperties(session);
 
   const portalHook = usePropertyPortals(session);
@@ -383,6 +383,7 @@ export default function AdminImoveis({ session }) {
           onUpdate={updateProperty}
           onDelete={deleteProperty}
           reload={reload}
+          getToken={getToken}
         />
       )}
 
