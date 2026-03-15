@@ -224,20 +224,25 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${supabaseUrl}/rest/v1/pipeline_deals?select=*`, {
+        const r = await fetch(`${supabaseUrl}/rest/v1/pipeline_deals?select=*,properties!property_id(title,neighborhood)`, {
           headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
         });
         const data = await r.json();
-        if (Array.isArray(data)) setDeals(data);
+        if (Array.isArray(data)) {
+          // Flatten joined properties data
+          setDeals(data.map(d => ({
+            ...d,
+            property_title: d.properties?.title || '',
+            property_neighborhood: d.properties?.neighborhood || '',
+            properties: undefined,
+          })));
+        }
       } catch (e) { console.error('CRM deals fetch:', e); }
     })();
   }, []);
 
   const getDealForLead = useCallback((lead) => {
-    return deals.find(d =>
-      (d.lead_uuid && d.lead_uuid === lead.id) ||
-      (d.lead_phone && lead.phone && d.lead_phone.replace(/\D/g, '') === lead.phone.replace(/\D/g, ''))
-    ) || null;
+    return deals.find(d => d.lead_uuid && d.lead_uuid === lead.id) || null;
   }, [deals]);
 
   const filteredLeads = leads.filter(l =>
@@ -312,11 +317,11 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
     try {
       const hdrs = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' };
       const lead = leads.find(l => l.id === leadId);
+      // Only send columns that exist in pipeline_deals
+      const { property_title, property_neighborhood, property_price, ...cleanData } = dealData;
       const body = {
-        ...dealData,
+        ...cleanData,
         lead_uuid: leadId,
-        lead_name: lead?.name || '',
-        lead_phone: lead?.phone || '',
         commission_value: (Number(dealData.deal_value) || 0) * (Number(dealData.commission_rate) || 0) / 100,
       };
       let result;
@@ -459,8 +464,38 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
             })}
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-[#E8E2D8] p-6 text-center text-[#8A8A8A]">
-            Visualização em lista ativa.
+          <div className="bg-white rounded-xl border border-[#E8E2D8] overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#E8E2D8] bg-[#FAF8F5]">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-[#8A8A8A]">Lead</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-[#8A8A8A]">Telefone</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-[#8A8A8A]">Etapa</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-[#8A8A8A]">Temp.</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-[#8A8A8A]">Valor</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-[#8A8A8A]">Imóvel</th>
+                  <th className="text-center px-4 py-3 text-xs font-medium text-[#8A8A8A]">Prob.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLeads.map(lead => {
+                  const deal = getDealForLead(lead);
+                  return (
+                    <tr key={lead.id} className="border-b border-[#E8E2D8] last:border-0 hover:bg-gray-50 cursor-pointer"
+                      onClick={() => setDealModal({ lead, deal })}>
+                      <td className="px-4 py-3 font-medium text-[#1B2B3A]">{lead.name}</td>
+                      <td className="px-4 py-3 text-[#5A5A5A]">{formatPhone(lead.phone)}</td>
+                      <td className="px-4 py-3"><span className="text-xs bg-gray-100 px-2 py-0.5 rounded">{lead.stage}</span></td>
+                      <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${TEMP_COLORS[lead.temperatura] || 'bg-slate-200 text-slate-800'}`}>{lead.temperatura}</span></td>
+                      <td className="px-4 py-3 text-right text-[#C4A265] font-medium">{deal ? formatCurrency(deal.deal_value) : '—'}</td>
+                      <td className="px-4 py-3 text-[#5A5A5A] truncate max-w-[200px]">{deal?.property_title || '—'}</td>
+                      <td className="px-4 py-3 text-center">{deal?.probability != null ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${deal.probability >= 70 ? 'bg-green-50 text-green-700' : deal.probability >= 40 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{deal.probability}%</span> : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filteredLeads.length === 0 && <p className="p-6 text-center text-[#8A8A8A]">Nenhum lead encontrado.</p>}
           </div>
         )}
       </div>

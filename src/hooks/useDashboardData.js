@@ -51,11 +51,13 @@ export function useDashboardData(session) {
         sb('pipeline_deals', `?status=neq.fechado&status=neq.perdido&status=neq.cancelado&select=deal_value,commission_value,commission_rate`),
         sb('pipeline_deals', `?status=eq.fechado&closed_at=gte.${monthStart}&select=commission_value`),
         sb('pipeline_deals', `?created_at=gte.${ninetyDaysAgo}&select=status`),
-        sb('pipeline_deals', `?status=in.(proposta,contrato)&order=probability.desc&limit=4&select=id,lead_name,lead_phone,property_title,property_neighborhood,deal_value,commission_value,probability,status,notes,expected_close_date`),
+        // JOIN with crm_leads and properties for top deals
+        sb('pipeline_deals', `?status=in.(proposta,contrato)&order=probability.desc&limit=4&select=id,deal_value,commission_value,probability,status,notes,expected_close_date,crm_leads!lead_uuid(name,phone),properties!property_id(title,neighborhood)`),
         sb('follow_ups', `?status=eq.pendente&select=id`),
         sb('follow_ups', `?status=eq.pendente&due_date=lt.${new Date(now.getTime() - 3*86400000).toISOString()}&select=id`),
         sb('agenda_appointments', `?appointment_type=eq.visita&start_time=gte.${weekStart.toISOString()}&start_time=lt.${weekEnd.toISOString()}&select=id`).catch(() => ({ count: 0 })),
-        sb('agenda_appointments', `?start_time=gte.${now.toISOString()}&start_time=lte.${twoHoursAhead}&status=in.(agendado,confirmado)&order=start_time.asc&limit=1&select=id,title,lead_name,start_time,appointment_type`).catch(() => ({ data: [] })),
+        // JOIN with crm_leads for next appointment
+        sb('agenda_appointments', `?start_time=gte.${now.toISOString()}&start_time=lte.${twoHoursAhead}&status=in.(agendado,confirmado)&order=start_time.asc&limit=1&select=id,title,start_time,appointment_type,crm_leads!lead_uuid(name)`).catch(() => ({ data: [] })),
         sb('admin_settings', `?key=in.(monthly_goal,default_commission_rate)&select=key,value`),
       ]);
 
@@ -78,13 +80,13 @@ export function useDashboardData(session) {
       funnelDeals.data.forEach(d => { funnelCounts[d.status] = (funnelCounts[d.status] || 0) + 1; });
       const funnel = FUNNEL_STAGES.map(s => ({ ...s, count: funnelCounts[s.status] || 0 }));
 
-      // Top deals
+      // Top deals — flatten joined data
       const topDealsList = topDeals.data.map(d => ({
         id: d.id,
-        lead_name: d.lead_name || '—',
-        lead_phone: d.lead_phone || '',
-        property_title: d.property_title || 'Imóvel não especificado',
-        property_neighborhood: d.property_neighborhood || '',
+        lead_name: d.crm_leads?.name || '—',
+        lead_phone: d.crm_leads?.phone || '',
+        property_title: d.properties?.title || 'Imóvel não especificado',
+        property_neighborhood: d.properties?.neighborhood || '',
         deal_value: d.deal_value || 0,
         commission_value: d.commission_value || 0,
         probability: d.probability || 0,
@@ -92,12 +94,12 @@ export function useDashboardData(session) {
         notes: d.notes || '',
       }));
 
-      // Próximo agendamento
+      // Próximo agendamento — flatten joined data
       const apptRaw = nextAppt.data?.[0];
       const nextAppointment = apptRaw ? {
         id: apptRaw.id,
         title: apptRaw.title || 'Agendamento',
-        lead_name: apptRaw.lead_name || '',
+        lead_name: apptRaw.crm_leads?.name || '',
         start_time: apptRaw.start_time,
         minutes_until: Math.round((new Date(apptRaw.start_time) - now) / 60000),
         appointment_type: apptRaw.appointment_type || 'visita',

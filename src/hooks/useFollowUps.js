@@ -18,20 +18,30 @@ async function sbGet(path) {
 
 async function sbPatch(table, id, body) {
   const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify(body),
+    method: 'PATCH', headers, body: JSON.stringify(body),
   });
   return r.json();
 }
 
 async function sbPost(table, body) {
   const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: { ...headers, Prefer: 'return=representation' },
+    method: 'POST', headers: { ...headers, Prefer: 'return=representation' },
     body: JSON.stringify(body),
   });
   return r.json();
+}
+
+// Flatten the joined crm_leads data onto the follow_up object
+function flattenFollowUp(f) {
+  const lead = f.crm_leads || {};
+  return {
+    ...f,
+    lead_name: lead.name || '',
+    lead_phone: lead.phone || '',
+    temperatura: lead.temperatura || '',
+    lead_stage: lead.stage || '',
+    crm_leads: undefined,
+  };
 }
 
 export function useFollowUps(session) {
@@ -45,13 +55,15 @@ export function useFollowUps(session) {
     if (!session) return;
     setIsLoading(true);
     try {
-      const [fus, tpls, settings, leadsRaw] = await Promise.all([
-        sbGet('follow_ups?order=due_date.asc&select=*'),
+      const [fusRaw, tpls, settings, leadsRaw] = await Promise.all([
+        // JOIN with crm_leads to get name, phone, temperatura, stage
+        sbGet('follow_ups?order=due_date.asc&select=*,crm_leads!lead_uuid(name,phone,temperatura,stage)'),
         sbGet('follow_up_templates?is_active=eq.true&order=cadence_day.asc&select=*'),
         sbGet('admin_settings?key=eq.uazapi_token&select=value'),
-        sbGet('n8n_leads_imobiliaria?select=id,name,phone,classificacao&order=name.asc&limit=200'),
+        sbGet('crm_leads?select=id,name,phone,temperatura,stage&order=name.asc&limit=200'),
       ]);
-      setFollowUps(Array.isArray(fus) ? fus : []);
+      const fus = Array.isArray(fusRaw) ? fusRaw.map(flattenFollowUp) : [];
+      setFollowUps(fus);
       setTemplates(Array.isArray(tpls) ? tpls : []);
       setUazToken(settings?.[0]?.value || '');
       setLeads(Array.isArray(leadsRaw) ? leadsRaw : []);
@@ -64,7 +76,6 @@ export function useFollowUps(session) {
 
   useEffect(() => { load(); }, [load]);
 
-  // --- Ações ---
   const markSent = useCallback(async (id) => {
     await sbPatch('follow_ups', id, { status: 'enviado', sent_at: new Date().toISOString() });
     setFollowUps(prev => prev.map(f => f.id === id ? { ...f, status: 'enviado', sent_at: new Date().toISOString() } : f));
@@ -96,36 +107,34 @@ export function useFollowUps(session) {
         headers: { 'Content-Type': 'application/json', token: uazToken },
         body: JSON.stringify({ number: phone, text: followUp.message_text }),
       });
-      if (r.ok) {
-        await markSent(followUp.id);
-        return true;
-      }
+      if (r.ok) { await markSent(followUp.id); return true; }
       return false;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
+    } catch (e) { console.error(e); return false; }
   }, [uazToken, markSent]);
 
   const createFollowUp = useCallback(async (data) => {
     const result = await sbPost('follow_ups', { ...data, status: 'pendente' });
     if (Array.isArray(result) && result[0]) {
-      setFollowUps(prev => [...prev, result[0]]);
+      // Refetch to get the joined lead data
+      const refreshed = await sbGet(`follow_ups?id=eq.${result[0].id}&select=*,crm_leads!lead_uuid(name,phone,temperatura,stage)`);
+      if (Array.isArray(refreshed) && refreshed[0]) {
+        setFollowUps(prev => [...prev, flattenFollowUp(refreshed[0])]);
+      } else {
+        setFollowUps(prev => [...prev, result[0]]);
+      }
     }
     return result;
   }, []);
 
-  // --- Métricas ---
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
   const tomorrowStr = new Date(now.getTime() + 86400000).toISOString().slice(0, 10);
   const pendentes = followUps.filter(f => f.status === 'pendente');
-  const atrasados = pendentes.filter(f => f.due_date.slice(0, 10) < todayStr);
+  const atrasados = pendentes.filter(f => f.due_date?.slice(0, 10) < todayStr);
   const enviados = followUps.filter(f => f.status === 'enviado');
   const respondidos = followUps.filter(f => f.status === 'respondido');
   const taxaResposta = enviados.length + respondidos.length > 0
-    ? Math.round((respondidos.length / (enviados.length + respondidos.length)) * 100)
-    : 0;
+    ? Math.round((respondidos.length / (enviados.length + respondidos.length)) * 100) : 0;
 
   return {
     followUps, templates, leads, isLoading,

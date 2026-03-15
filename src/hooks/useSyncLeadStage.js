@@ -78,8 +78,6 @@ export async function createAutoFollowUp(leadId, leadName, leadPhone, newStage) 
       headers,
       body: JSON.stringify({
         lead_uuid: leadId,
-        lead_name: leadName,
-        lead_phone: leadPhone,
         type: rule.type,
         status: 'pendente',
         due_date: dueDate.toISOString(),
@@ -129,25 +127,64 @@ export async function onAppointmentCompleted(appointment) {
   if (!leadUuid) return null;
 
   try {
-    // Fetch the lead
     const r = await fetch(`${SB_URL}/rest/v1/crm_leads?id=eq.${leadUuid}&select=*`, { headers });
     const leads = await r.json();
     if (!Array.isArray(leads) || leads.length === 0) return null;
 
     const lead = leads[0];
 
-    // If it was a visit and lead is at "Visita Agendada" → advance to "Em Negociação"
     if (appointment.appointment_type === 'visita' && lead.stage === 'Visita Agendada') {
       await updateLeadStage(leadUuid, 'Em Negociação');
       await syncDealStatus(leadUuid, 'Em Negociação');
-
-      // Create post-visit follow-up (2 hours later, but we'll use 2 days for practical purposes)
       await createAutoFollowUp(leadUuid, lead.name, lead.phone, 'Em Negociação');
-
       return { ...lead, stage: 'Em Negociação' };
     }
   } catch (e) {
     console.error('onAppointmentCompleted error:', e);
   }
   return null;
+}
+
+// Auto follow-ups when a NEW lead is created, based on temperatura
+// QUENTE: day 1 + day 3 | MORNO: day 3 + day 7 + day 15 | FRIO: day 15 + day 30
+export async function createNewLeadFollowUps(leadId, temperatura) {
+  const schedules = {
+    QUENTE: [1, 3],
+    MORNO: [3, 7, 15],
+    FRIO: [15, 30],
+  };
+  const days = schedules[temperatura] || schedules.MORNO;
+
+  // Fetch templates by cadence_day
+  let templates = [];
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/follow_up_templates?is_active=eq.true&select=*`, { headers });
+    templates = await r.json();
+    if (!Array.isArray(templates)) templates = [];
+  } catch (e) { /* continue without templates */ }
+
+  for (const day of days) {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + day);
+    dueDate.setHours(10, 0, 0, 0);
+
+    const tpl = templates.find(t => t.cadence_day === day);
+
+    try {
+      await fetch(`${SB_URL}/rest/v1/follow_ups`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          lead_uuid: leadId,
+          type: tpl?.type || 'followup',
+          template_key: tpl?.key || null,
+          status: 'pendente',
+          due_date: dueDate.toISOString(),
+          message_text: tpl?.message_text || `Olá! Tudo bem? Gostaria de saber se posso ajudar com alguma informação sobre imóveis.`,
+        }),
+      });
+    } catch (e) {
+      console.error('createNewLeadFollowUps error:', e);
+    }
+  }
 }

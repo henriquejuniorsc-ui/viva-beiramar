@@ -18,14 +18,25 @@ async function sbGet(path) {
 
 async function sbPatch(id, body) {
   const r = await fetch(`${SB_URL}/rest/v1/pipeline_deals?id=eq.${id}`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify(body),
+    method: 'PATCH', headers, body: JSON.stringify(body),
   });
   return r.json();
 }
 
 const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+// Flatten joined data
+function flattenDeal(d) {
+  return {
+    ...d,
+    lead_name: d.crm_leads?.name || '',
+    lead_phone: d.crm_leads?.phone || '',
+    property_title: d.properties?.title || '',
+    property_neighborhood: d.properties?.neighborhood || '',
+    crm_leads: undefined,
+    properties: undefined,
+  };
+}
 
 export function useComissoes(session) {
   const now = new Date();
@@ -33,24 +44,23 @@ export function useComissoes(session) {
   const [deals, setDeals] = useState([]);
   const [settings, setSettings] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [histChart, setHistChart] = useState([]);
 
   const load = useCallback(async () => {
     if (!session) return;
     setIsLoading(true);
     try {
       const { year, month } = currentMonth;
-      const monthStart = new Date(year, month, 1).toISOString();
-      const monthEnd = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
-      const yearStart = new Date(year, 0, 1).toISOString();
       const sixMonthsAgo = new Date(year, month - 5, 1).toISOString();
 
-      const [allDeals, settingsRaw, historyRaw] = await Promise.all([
-        sbGet(`pipeline_deals?select=id,lead_name,property_title,property_neighborhood,deal_value,commission_value,commission_rate,status,payment_status,payment_received_at,closed_at,expected_close_date,probability,notes`),
+      const [allDealsRaw, settingsRaw, historyRaw] = await Promise.all([
+        // JOIN with crm_leads and properties
+        sbGet(`pipeline_deals?select=id,deal_value,commission_value,commission_rate,status,payment_status,payment_received_at,closed_at,expected_close_date,probability,notes,crm_leads!lead_uuid(name,phone),properties!property_id(title,neighborhood)`),
         sbGet('admin_settings?select=key,value'),
         sbGet(`pipeline_deals?status=eq.fechado&closed_at=gte.${sixMonthsAgo}&select=commission_value,payment_status,closed_at`),
       ]);
 
-      setDeals(allDeals);
+      setDeals(Array.isArray(allDealsRaw) ? allDealsRaw.map(flattenDeal) : []);
 
       const map = {};
       settingsRaw.forEach(s => { map[s.key] = s.value; });
@@ -66,21 +76,18 @@ export function useComissoes(session) {
         else hist[k].pendente += d.commission_value || 0;
       });
 
-      const histChart = Array.from({ length: 6 }, (_, i) => {
+      const hc = Array.from({ length: 6 }, (_, i) => {
         const d = new Date(year, month - 5 + i, 1);
         const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
         return { month: MONTH_NAMES[d.getMonth()].slice(0,3), recebido: hist[k]?.recebido || 0, pendente: hist[k]?.pendente || 0 };
       });
-
-      setHistChart(histChart);
+      setHistChart(hc);
     } catch (e) {
       console.error(e);
     } finally {
       setIsLoading(false);
     }
   }, [session, currentMonth]);
-
-  const [histChart, setHistChart] = useState([]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -92,7 +99,6 @@ export function useComissoes(session) {
   const prevMonth = () => setCurrentMonth(({ year, month }) => month === 0 ? { year: year-1, month: 11 } : { year, month: month-1 });
   const nextMonth = () => setCurrentMonth(({ year, month }) => month === 11 ? { year: year+1, month: 0 } : { year, month: month+1 });
 
-  // Deals do mês selecionado
   const { year, month } = currentMonth;
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
@@ -110,7 +116,6 @@ export function useComissoes(session) {
   const monthlyGoal = Number(settings['monthly_goal'] || 35000);
   const metaPct = monthlyGoal > 0 ? Math.round(((recebidoTotal + aReceberTotal) / monthlyGoal) * 100) : 0;
 
-  // Resumo anual
   const yearDeals = deals.filter(d => d.status === 'fechado' && d.closed_at && new Date(d.closed_at).getFullYear() === year);
   const yearTotal = yearDeals.filter(d => d.payment_status === 'recebido').reduce((s, d) => s + (d.commission_value || 0), 0);
   const avgTicket = yearDeals.length > 0 ? yearDeals.reduce((s, d) => s + (d.deal_value || 0), 0) / yearDeals.length : 0;
