@@ -5,6 +5,7 @@ import ComissoesPage from './components/comissoes/Comissoes';
 import AdminImoveis from './components/imoveis/AdminImoveis';
 import ConversasPage from './components/conversas/ConversasPage';
 import RelatoriosPage from './components/relatorios/RelatoriosPage';
+import { useGoogleCalendar } from './hooks/useGoogleCalendar';
 import {
   LayoutDashboard, Home, Users, Settings, LogOut, Search, Plus,
   X, Check, AlertCircle, MapPin, BedDouble, Bath, Car, Maximize,
@@ -608,19 +609,14 @@ const DealModal = ({ lead, deal, properties, onClose, onSave }) => {
 // 3. IMÓVEIS — Movido para src/components/imoveis/AdminImoveis.jsx
 
 // 4. CONFIGURAÇÕES
-const SettingsPage = ({ uazConfig, setUazConfig, googleConfig, setGoogleConfig, setToast }) => {
+const SettingsPage = ({ uazConfig, setUazConfig, googleCal, setToast }) => {
   const handleSaveUaz = (e) => {
     e.preventDefault();
     localStorage.setItem('uazapiUrl', uazConfig.url);
     localStorage.setItem('uazapiToken', uazConfig.token);
     setToast({ message: 'Configurações de WhatsApp salvas!', type: 'success' });
   };
-
-  const handleSaveGoogle = (e) => {
-    e.preventDefault();
-    localStorage.setItem('googleApiToken', googleConfig.token);
-    setToast({ message: 'Token do Google Calendar salvo!', type: 'success' });
-  };
+  const [gcClientId, setGcClientId] = useState(googleCal.clientId || '');
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 fade-in pb-12">
@@ -657,18 +653,61 @@ const SettingsPage = ({ uazConfig, setUazConfig, googleConfig, setGoogleConfig, 
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-[#E8E2D8]">
         <div className="flex items-center space-x-3 mb-6">
           <div className="p-2 bg-[#F5F0E8] rounded-lg"><CalendarDays className="w-6 h-6 text-[#C4A265]" /></div>
-          <h3 className="text-lg font-bold text-[#1B2B3A] font-serif">Integração Google Calendar</h3>
+          <h3 className="text-lg font-bold text-[#1B2B3A] font-serif">Google Calendar</h3>
         </div>
-        <form onSubmit={handleSaveGoogle} className="space-y-4">
-          <p className="text-sm text-[#8A8A8A] mb-4">Insira seu Token de Acesso da API do Google Calendar para sincronização bidirecional.</p>
-          <div>
-            <label className="block text-sm font-medium text-[#1B2B3A] mb-1">Access Token</label>
-            <input type="password" placeholder="Token de acesso OAuth 2.0" value={googleConfig.token} onChange={e => setGoogleConfig({...googleConfig, token: e.target.value})} className="w-full p-2.5 rounded-xl border border-[#E8E2D8] bg-[#FAF8F5] focus:bg-white outline-none focus:border-[#C4A265]" />
+
+        {googleCal.isConnected ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-200">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <Check className="w-5 h-5 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-green-800">Conectado ao Google Calendar</p>
+                {googleCal.userEmail && <p className="text-xs text-green-600">{googleCal.userEmail}</p>}
+              </div>
+              <Button variant="danger" className="text-xs px-3 py-1.5" onClick={() => { googleCal.disconnect(); setToast({ message: 'Google Calendar desconectado.', type: 'info' }); }}>
+                Desconectar
+              </Button>
+            </div>
           </div>
-          <div className="pt-2 flex justify-end">
-            <Button type="submit">Salvar Token Google</Button>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-[#8A8A8A]">Conecte sua conta Google para sincronizar agendamentos automaticamente.</p>
+
+            <div>
+              <label className="block text-sm font-medium text-[#1B2B3A] mb-1">Client ID do Google</label>
+              <input type="text" placeholder="xxxx.apps.googleusercontent.com" value={gcClientId}
+                onChange={e => setGcClientId(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-[#E8E2D8] bg-[#FAF8F5] focus:bg-white outline-none focus:border-[#C4A265] text-sm" />
+              <p className="text-[10px] text-[#8A8A8A] mt-1">
+                Crie em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-[#C4A265] underline">Google Cloud Console</a> → Credenciais → ID do cliente OAuth 2.0 (tipo: Aplicativo da Web)
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <Button variant="outlineGray" onClick={() => {
+                googleCal.saveClientId(gcClientId);
+                setToast({ message: 'Client ID salvo!', type: 'success' });
+              }}>Salvar Client ID</Button>
+
+              <Button onClick={async () => {
+                if (gcClientId) googleCal.saveClientId(gcClientId);
+                try {
+                  await googleCal.connect();
+                  setToast({ message: 'Google Calendar conectado com sucesso!', type: 'success' });
+                } catch (e) {
+                  setToast({ message: e.message || 'Erro ao conectar.', type: 'error' });
+                }
+              }} isLoading={googleCal.isLoading}>
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" /></svg>
+                  Conectar com Google
+                </div>
+              </Button>
+            </div>
           </div>
-        </form>
+        )}
       </div>
     </div>
   );
@@ -677,11 +716,11 @@ const SettingsPage = ({ uazConfig, setUazConfig, googleConfig, setGoogleConfig, 
 // 5. CONVERSAS — Movido para src/components/conversas/ConversasPage.jsx
 
 // 6. AGENDA
-const Agenda = ({ appointments, setAppointments, leads, properties, googleConfig, openAgendaModal, setToast }) => {
+const Agenda = ({ appointments, setAppointments, leads, properties, googleCal, openAgendaModal, setToast }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('month');
-  const [isConnected, setIsConnected] = useState(!!googleConfig.token);
   const [filterType, setFilterType] = useState('Todos');
+  const isConnected = googleCal.isConnected;
 
   const today = new Date();
   const todayAppointments = appointments.filter(a => isSameDay(new Date(a.start_time), today));
@@ -831,12 +870,24 @@ const Agenda = ({ appointments, setAppointments, leads, properties, googleConfig
           <p className="text-[#8A8A8A] text-sm mb-8 leading-relaxed">
             Sincronize seus agendamentos com o Google Calendar para gerenciar visitas, reuniões e compromissos em um só lugar.
           </p>
-          <Button className="w-full mb-6" onClick={() => setIsConnected(true)}>
+          <Button className="w-full mb-6" isLoading={googleCal.isLoading} onClick={async () => {
+            try {
+              await googleCal.connect();
+              setToast({ message: 'Google Calendar conectado!', type: 'success' });
+            } catch (e) {
+              setToast({ message: e.message || 'Erro ao conectar. Configure o Client ID nas Configurações.', type: 'error' });
+            }
+          }}>
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" /></svg>
-              Conectar Google Calendar
+              Conectar com Google
             </div>
           </Button>
+          {!googleCal.clientId && (
+            <p className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg mb-4">
+              Primeiro configure o Client ID do Google nas <strong>Configurações</strong>.
+            </p>
+          )}
           <div className="text-left space-y-3 border-t border-[#E8E2D8] pt-6 mt-2">
             <div className="flex items-center text-sm text-[#5A5A5A]"><Check className="w-4 h-4 text-emerald-500 mr-2" /> Sincronize visitas automaticamente</div>
             <div className="flex items-center text-sm text-[#5A5A5A]"><Check className="w-4 h-4 text-emerald-500 mr-2" /> Veja todos os compromissos do dia</div>
@@ -854,7 +905,7 @@ const Agenda = ({ appointments, setAppointments, leads, properties, googleConfig
           { label: 'Compromissos Hoje', value: todayAppointments.length, icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-50' },
           { label: 'Visitas da Semana', value: weekVisits, icon: Home, color: 'text-[#C4A265]', bg: 'bg-[#F5F0E8]' },
           { label: 'Leads Agendados', value: uniqueLeads, icon: User, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-          { label: 'Sincronização', value: 'Google API', icon: CheckCheck, color: 'text-red-500', bg: 'bg-red-50' }
+          { label: 'Google Calendar', value: googleCal.userEmail ? googleCal.userEmail.split('@')[0] : 'Conectado', icon: CheckCheck, color: 'text-green-500', bg: 'bg-green-50' }
         ].map((stat, i) => (
           <div key={i} className="bg-white p-4 rounded-xl shadow-sm border border-[#E8E2D8] flex items-center space-x-3">
             <div className={`p-2.5 rounded-lg ${stat.bg} ${stat.color}`}><stat.icon className="w-5 h-5" /></div>
@@ -1048,7 +1099,7 @@ export default function App() {
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   const [uazConfig, setUazConfig] = useState({ url: '', token: '' });
-  const [googleConfig, setGoogleConfig] = useState({ token: '' });
+  const googleCal = useGoogleCalendar();
   const [agendaModalData, setAgendaModalData] = useState(null);
 
   const [toast, setToastState] = useState(null);
@@ -1082,9 +1133,6 @@ export default function App() {
     setUazConfig({
       url: localStorage.getItem('uazapiUrl') || '',
       token: localStorage.getItem('uazapiToken') || ''
-    });
-    setGoogleConfig({
-      token: localStorage.getItem('googleApiToken') || ''
     });
 
     const loadSupabase = async () => {
@@ -1180,8 +1228,11 @@ export default function App() {
         });
       }
 
-      if (googleConfig.token) {
-        console.log("Mock POST to Google Calendar API with token:", googleConfig.token);
+      // Sync to Google Calendar if connected
+      if (googleCal.isConnected && isNew) {
+        googleCal.createEvent(payload).catch(e => {
+          console.error('Google Calendar sync error:', e);
+        });
       }
     }
     setAgendaModalData(null);
@@ -1330,12 +1381,12 @@ export default function App() {
           {currentRoute === 'dashboard' && <CockpitDashboard session={session} />}
           {currentRoute === 'crm' && <CRM leads={leads} properties={properties} updateLead={updateLeadInState} setToast={setToast} reloadData={loadData} openAgendaModal={setAgendaModalData} />}
           {currentRoute === 'conversas' && <ConversasPage session={session} setCurrentRoute={setCurrentRoute} />}
-          {currentRoute === 'agenda' && <Agenda appointments={appointments} setAppointments={setAppointments} leads={leads} properties={properties} googleConfig={googleConfig} openAgendaModal={setAgendaModalData} setToast={setToast} />}
+          {currentRoute === 'agenda' && <Agenda appointments={appointments} setAppointments={setAppointments} leads={leads} properties={properties} googleCal={googleCal} openAgendaModal={setAgendaModalData} setToast={setToast} />}
           {currentRoute === 'properties' && <AdminImoveis session={session} />}
           {currentRoute === 'followups' && <FollowUpsPage session={session} />}
           {currentRoute === 'comissoes' && <ComissoesPage session={session} />}
           {currentRoute === 'relatorios' && <RelatoriosPage session={session} />}
-          {currentRoute === 'settings' && <SettingsPage uazConfig={uazConfig} setUazConfig={setUazConfig} googleConfig={googleConfig} setGoogleConfig={setGoogleConfig} setToast={setToast} />}
+          {currentRoute === 'settings' && <SettingsPage uazConfig={uazConfig} setUazConfig={setUazConfig} googleCal={googleCal} setToast={setToast} />}
         </div>
       </main>
     </div>
