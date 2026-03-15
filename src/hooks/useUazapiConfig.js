@@ -39,17 +39,23 @@ export function useUazapiConfig() {
 
   const uazFetch = async (path, options = {}) => {
     if (!config.baseUrl || !config.token) throw new Error('UAZAPI não configurada');
-    const sep = path.includes('?') ? '&' : '?';
-    const url = `${config.baseUrl}${path}${sep}token=${config.token}`;
+    const url = `${config.baseUrl}${path}`;
     const r = await fetch(url, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        token: config.token,
+        ...options.headers,
+      },
     });
     if (!r.ok) {
       const text = await r.text().catch(() => '');
-      throw new Error(`UAZAPI ${r.status}: ${text}`);
+      let parsed;
+      try { parsed = JSON.parse(text); } catch { parsed = { message: text }; }
+      throw new Error(`UAZAPI ${r.status}: ${parsed.message || text}`);
     }
-    return r.json();
+    const text = await r.text();
+    try { return JSON.parse(text); } catch { return { raw: text }; }
   };
 
   return { config, isLoading, uazFetch };

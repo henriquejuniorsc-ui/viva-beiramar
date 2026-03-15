@@ -16,7 +16,7 @@ export default function ConversasPage({ session, setCurrentRoute }) {
   const { config, isLoading: configLoading, uazFetch } = useUazapiConfig();
   const configReady = !configLoading && !!config.baseUrl && !!config.token;
 
-  const { status: waStatus, isLoading: statusLoading, check: checkStatus, logout } = useWhatsappStatus(uazFetch, configReady);
+  const { status: waStatus, isLoading: statusLoading, check: checkStatus, logout, triggerConnect } = useWhatsappStatus(uazFetch, configReady);
 
   const chatHook = useWhatsappChats(session);
   const msgHook = useWhatsappMessages();
@@ -86,7 +86,7 @@ export default function ConversasPage({ session, setCurrentRoute }) {
 
   // Not connected — show QR
   if (!waStatus.connected) {
-    return <QRCodeScreen uazFetch={uazFetch} onConnected={checkStatus} />;
+    return <QRCodeScreen uazFetch={uazFetch} onConnected={checkStatus} triggerConnect={triggerConnect} />;
   }
 
   // Connected — show chat interface
