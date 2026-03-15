@@ -8,8 +8,25 @@ import {
 
 const PORTAL_COLORS = {
   zap: '#0077B6', vivareal: '#00A651', olx: '#6E0AD6', imovelweb: '#FF6B00',
+  chavesnamao: '#E91E63', creci: '#795548',
 };
-const PORTAL_LABELS = { zap: 'ZAP', vivareal: 'Viva', olx: 'OLX', imovelweb: 'Imov' };
+const PORTAL_LABELS = { zap: 'ZAP', vivareal: 'Viva', olx: 'OLX', imovelweb: 'Imov', chavesnamao: 'Chaves', creci: 'CRECI' };
+
+const FEED_URL = typeof window !== 'undefined'
+  ? `${window.location.origin}/api/feed/vrsync`
+  : '/api/feed/vrsync';
+
+// Validate property for portal publishing
+function validateForPortal(property) {
+  const errors = [];
+  if (!property.title || property.title.length < 5) errors.push('Título curto ou ausente');
+  if (!property.type) errors.push('Tipo não definido');
+  if (!property.price || Number(property.price) <= 0) errors.push('Preço ausente');
+  if (!property.description && !property.portal_description) errors.push('Sem descrição');
+  if (!property.images || property.images.length === 0) errors.push('Sem fotos');
+  if (!property.neighborhood) errors.push('Sem bairro');
+  return errors;
+}
 
 function timeAgo(date) {
   if (!date) return '—';
@@ -23,6 +40,12 @@ function timeAgo(date) {
 
 // --- Portal Card ---
 function PortalCard({ config, publishedCount, onConfigure, onSync }) {
+  const [copied, setCopied] = useState(false);
+  const copyUrl = () => {
+    navigator.clipboard.writeText(FEED_URL);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   return (
     <div className="bg-white rounded-xl border border-[#E8E2D8] p-4 flex flex-col gap-3">
       <div className="flex items-center gap-3">
@@ -43,16 +66,25 @@ function PortalCard({ config, publishedCount, onConfigure, onSync }) {
       </div>
       <div className="text-xs text-[#8A8A8A] space-y-1">
         <p>{publishedCount} imóveis publicados</p>
-        {config.last_sync_at && <p className="flex items-center gap-1"><Clock className="w-3 h-3" />Última sync: {timeAgo(config.last_sync_at)}</p>}
+        {config.last_sync_at && <p className="flex items-center gap-1"><Clock className="w-3 h-3" />Última leitura: {timeAgo(config.last_sync_at)}</p>}
         {config.last_sync_status === 'error' && <p className="text-red-500 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Erro na última sync</p>}
       </div>
-      <div className="flex gap-2 mt-auto">
-        {config.is_active && (
-          <button onClick={() => onSync(config.portal_name)}
-            className="flex-1 px-3 py-2 bg-gray-50 text-[#1B2B3A] rounded-lg text-xs font-medium hover:bg-gray-100 flex items-center justify-center gap-1">
-            <RefreshCw className="w-3 h-3" />Sync
+      {/* Feed URL */}
+      <div className="bg-gray-50 rounded-lg p-2">
+        <p className="text-[10px] text-[#8A8A8A] mb-1">URL do XML Feed:</p>
+        <div className="flex gap-1">
+          <input type="text" readOnly value={FEED_URL} className="flex-1 text-[10px] bg-white px-2 py-1 rounded border border-[#E8E2D8] truncate" />
+          <button onClick={copyUrl}
+            className={`px-2 py-1 rounded text-[10px] transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-white border border-[#E8E2D8] hover:bg-gray-100'}`}>
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
           </button>
-        )}
+        </div>
+      </div>
+      <div className="flex gap-2 mt-auto">
+        <a href={FEED_URL} target="_blank" rel="noopener noreferrer"
+          className="flex-1 px-3 py-2 bg-gray-50 text-[#1B2B3A] rounded-lg text-xs font-medium hover:bg-gray-100 flex items-center justify-center gap-1">
+          <Eye className="w-3 h-3" />Ver XML
+        </a>
         <button onClick={() => onConfigure(config)}
           className="flex-1 px-3 py-2 bg-gray-50 text-[#1B2B3A] rounded-lg text-xs font-medium hover:bg-gray-100 flex items-center justify-center gap-1">
           <Settings className="w-3 h-3" />Configurar
@@ -239,6 +271,22 @@ export default function PortalsTab({ session, portalHook, properties, reload }) 
   const [selectedIds, setSelectedIds] = useState([]);
   const [syncing, setSyncing] = useState(null);
   const [bulkPortal, setBulkPortal] = useState(null);
+  const [validationWarning, setValidationWarning] = useState(null);
+
+  // Wrap toggle with validation
+  const handleTogglePublish = (propId, portalName, publish) => {
+    if (publish) {
+      const prop = properties.find(p => p.id === propId);
+      if (prop) {
+        const errors = validateForPortal(prop);
+        if (errors.length > 0) {
+          setValidationWarning({ title: prop.title, errors });
+          return;
+        }
+      }
+    }
+    togglePropertyPortal(propId, portalName, publish);
+  };
 
   const portalNames = portalConfigs.map(c => c.portal_name);
 
@@ -405,7 +453,7 @@ export default function PortalsTab({ session, portalHook, properties, reload }) 
                       const published = pp?.is_published;
                       return (
                         <td key={c.portal_name} className="px-3 py-3 text-center">
-                          <button onClick={() => togglePropertyPortal(prop.id, c.portal_name, !published)}
+                          <button onClick={() => handleTogglePublish(prop.id, c.portal_name, !published)}
                             className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all
                               ${published ? 'border-green-400 bg-green-50 text-green-600' : 'border-gray-200 bg-white text-gray-300 hover:border-gray-400'}`}>
                             {published ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
@@ -473,12 +521,60 @@ export default function PortalsTab({ session, portalHook, properties, reload }) 
         </div>
       )}
 
+      {/* Feed URL Card */}
+      <div className="bg-white rounded-xl border border-[#E8E2D8] p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <Globe className="w-5 h-5 text-[#C4A265]" />
+          <div>
+            <h3 className="text-sm font-medium text-[#1B2B3A]">URL do XML Feed (VRSync)</h3>
+            <p className="text-[10px] text-[#8A8A8A]">Cole esta URL no Canal Pro (ZAP/VivaReal/OLX) ou no painel de cada portal</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <input type="text" readOnly value={FEED_URL}
+            className="flex-1 px-3 py-2 rounded-lg border border-[#E8E2D8] text-xs bg-gray-50 text-[#1B2B3A]" />
+          <button onClick={() => { navigator.clipboard.writeText(FEED_URL); }}
+            className="px-3 py-2 bg-[#C4A265] text-white rounded-lg text-xs font-medium hover:bg-[#b89355] flex items-center gap-1">
+            <Copy className="w-3.5 h-3.5" />Copiar
+          </button>
+          <a href={FEED_URL} target="_blank" rel="noopener noreferrer"
+            className="px-3 py-2 border border-[#E8E2D8] rounded-lg text-xs text-[#1B2B3A] hover:bg-gray-50 flex items-center gap-1">
+            <ExternalLink className="w-3.5 h-3.5" />Abrir
+          </a>
+        </div>
+      </div>
+
       {/* Modals */}
       {configModal && (
         <PortalConfigModal config={configModal} onClose={() => setConfigModal(null)} onSave={handleSaveConfig} />
       )}
       {xmlPreview && (
         <XMLPreviewModal properties={properties} onClose={() => setXmlPreview(false)} />
+      )}
+
+      {/* Validation Warning */}
+      {validationWarning && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setValidationWarning(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-[#1B2B3A] text-sm">Não pode publicar</h3>
+                <p className="text-xs text-[#8A8A8A]">{validationWarning.title}</p>
+              </div>
+            </div>
+            <p className="text-sm text-[#1B2B3A] mb-2">Campos obrigatórios faltando:</p>
+            <ul className="text-xs text-red-600 space-y-1 mb-4">
+              {validationWarning.errors.map((err, i) => (
+                <li key={i} className="flex items-center gap-1"><XCircle className="w-3 h-3" />{err}</li>
+              ))}
+            </ul>
+            <button onClick={() => setValidationWarning(null)}
+              className="w-full px-4 py-2 bg-[#C4A265] text-white rounded-lg text-sm hover:bg-[#b89355]">Entendi</button>
+          </div>
+        </div>
       )}
     </div>
   );
