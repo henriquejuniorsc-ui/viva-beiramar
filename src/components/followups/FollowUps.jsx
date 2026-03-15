@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   ListChecks, Plus, Phone, Calendar, Check, CheckCheck,
-  Clock, AlertCircle, ChevronDown, Search, X, Send, MessageSquare
+  Clock, AlertCircle, ChevronDown, Search, X, Send, MessageSquare, Edit3
 } from 'lucide-react';
 import { useFollowUps } from '../../hooks/useFollowUps';
 
@@ -37,6 +37,34 @@ const renderMessage = (template, lead) => {
     .replace(/{objetivo}/g, 'imóvel');
 };
 
+// Replace placeholders in follow-up message text
+function replacePlaceholders(text, fu) {
+  if (!text) return '';
+  const firstName = (fu.lead_name || 'Cliente').split(' ')[0];
+  return text
+    .replace(/\{nome\}/g, firstName)
+    .replace(/\{imovel\}/g, fu.property_title || 'imóvel')
+    .replace(/\{bairro\}/g, fu.property_neighborhood || 'região');
+}
+
+function formatPhone(phone) {
+  if (!phone) return '';
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length === 13 && clean.startsWith('55')) {
+    return `(${clean.slice(2, 4)}) ${clean.slice(4, 9)}-${clean.slice(9)}`;
+  }
+  if (clean.length >= 10) {
+    const ddd = clean.slice(0, 2);
+    const rest = clean.slice(2);
+    return `(${ddd}) ${rest.slice(0, rest.length - 4)}-${rest.slice(-4)}`;
+  }
+  return phone;
+}
+
+const TEMP_COLORS = {
+  QUENTE: 'text-red-600', MORNO: 'text-amber-600', FRIO: 'text-blue-600',
+};
+
 // --- Skeleton ---
 const Sk = ({ w = 'w-full', h = 'h-4' }) => <div className={`${w} ${h} bg-gray-200 rounded animate-pulse`} />;
 
@@ -44,108 +72,125 @@ const Sk = ({ w = 'w-full', h = 'h-4' }) => <div className={`${w} ${h} bg-gray-2
 function FollowUpCard({ fu, todayStr, tomorrowStr, onSend, onMarkSent, onMarkResponded, onDelay, onReschedule, sending }) {
   const [showReschedule, setShowReschedule] = useState(false);
   const [newDate, setNewDate] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState('');
   const dot = urgencyDot(fu.due_date, todayStr);
   const label = timeLabel(fu.due_date, todayStr, tomorrowStr);
-  const isOverdue = fu.due_date.slice(0, 10) < todayStr;
-  const isToday = fu.due_date.slice(0, 10) === todayStr;
+  const isOverdue = fu.due_date?.slice(0, 10) < todayStr;
+  const isToday = fu.due_date?.slice(0, 10) === todayStr;
+
+  // Replace placeholders in message
+  const displayMessage = replacePlaceholders(fu.message_text, fu);
+
+  const handleEdit = () => {
+    setEditedText(displayMessage);
+    setIsEditing(true);
+  };
+
+  const handleSendEdited = () => {
+    onSend({ ...fu, message_text: editedText });
+    setIsEditing(false);
+  };
 
   return (
     <div className={`bg-white rounded-xl border p-4 hover:shadow-md transition-shadow ${isOverdue ? 'border-red-100' : isToday ? 'border-green-100' : 'border-gray-100'}`}>
       <div className="flex items-start gap-3">
-        {/* Dot */}
         <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${dot}`} />
 
         <div className="flex-1 min-w-0">
-          {/* Header */}
+          {/* Lead info */}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-            <div className="flex items-center gap-2">
+            <div>
               <span className="font-medium text-gray-900 text-sm">{fu.lead_name || '—'}</span>
+              <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
+                {fu.lead_phone && <span>{formatPhone(fu.lead_phone)}</span>}
+                {fu.temperatura && <span className={`font-medium ${TEMP_COLORS[fu.temperatura] || ''}`}>{fu.temperatura}</span>}
+                {fu.lead_stage && <span>· {fu.lead_stage}</span>}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isOverdue ? 'bg-red-50 text-red-600' : isToday ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
                 {label}
               </span>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                fu.status === 'enviado' ? 'bg-blue-50 text-blue-600'
+                : fu.status === 'respondido' ? 'bg-emerald-50 text-emerald-700'
+                : fu.status === 'ignorado' ? 'bg-gray-100 text-gray-400'
+                : isOverdue ? 'bg-red-50 text-red-600'
+                : 'bg-amber-50 text-amber-700'
+              }`}>
+                {fu.status === 'pendente' ? (isOverdue ? 'ATRASADO' : 'PENDENTE') : fu.status.toUpperCase()}
+              </span>
             </div>
-            {fu.deal_id && <span className="text-xs text-gray-400 truncate max-w-[160px]">{fu.lead_name}</span>}
           </div>
 
-          {/* Mensagem preview */}
-          {fu.message_text && (
-            <p className="text-xs text-gray-500 italic mt-1 mb-3 line-clamp-2 bg-gray-50 rounded-lg px-3 py-2">
-              "{fu.message_text}"
+          {/* Message — editable or preview */}
+          {isEditing ? (
+            <div className="mt-2 mb-3">
+              <textarea value={editedText} onChange={e => setEditedText(e.target.value)}
+                rows={3} className="w-full text-xs border border-[#c9a84c] rounded-lg px-3 py-2 outline-none resize-none focus:ring-1 focus:ring-[#c9a84c]" />
+              <div className="flex gap-2 mt-2">
+                <button onClick={handleSendEdited} disabled={sending === fu.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#1fba58] text-white text-xs font-medium rounded-lg disabled:opacity-50">
+                  <Send className="w-3.5 h-3.5" />{sending === fu.id ? 'Enviando…' : 'Enviar'}
+                </button>
+                <button onClick={() => setIsEditing(false)}
+                  className="px-3 py-1.5 text-gray-500 text-xs hover:bg-gray-100 rounded-lg">Cancelar</button>
+              </div>
+            </div>
+          ) : displayMessage && (
+            <p className="text-xs text-gray-500 italic mt-1 mb-3 line-clamp-3 bg-gray-50 rounded-lg px-3 py-2">
+              "{displayMessage}"
             </p>
           )}
 
-          {/* Ações */}
-          <div className="flex flex-wrap gap-2">
-            {fu.status === 'pendente' && (
-              <>
-                <button
-                  onClick={() => onSend(fu)}
-                  disabled={sending === fu.id}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#1fba58] text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  {sending === fu.id ? 'Enviando…' : 'Enviar WhatsApp'}
+          {/* Actions */}
+          {!isEditing && (
+            <div className="flex flex-wrap gap-2">
+              {fu.status === 'pendente' && (
+                <>
+                  <button onClick={handleEdit}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors">
+                    ✏️ Editar
+                  </button>
+                  <button onClick={() => onSend({ ...fu, message_text: displayMessage })} disabled={sending === fu.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#1fba58] text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50">
+                    <MessageSquare className="w-3.5 h-3.5" />{sending === fu.id ? 'Enviando…' : 'Enviar WhatsApp'}
+                  </button>
+                  <button onClick={() => onDelay(fu.id, fu.due_date)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors">
+                    <Clock className="w-3.5 h-3.5" /> Adiar 1 dia
+                  </button>
+                  <button onClick={() => setShowReschedule(v => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors">
+                    <Calendar className="w-3.5 h-3.5" /> Reagendar
+                  </button>
+                  <button onClick={() => onMarkSent(fu.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition-colors">
+                    <Check className="w-3.5 h-3.5" /> Marcar enviado
+                  </button>
+                </>
+              )}
+              {fu.status === 'enviado' && (
+                <button onClick={() => onMarkResponded(fu.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg transition-colors">
+                  <CheckCheck className="w-3.5 h-3.5" /> Marcar respondido
                 </button>
-                <button
-                  onClick={() => onDelay(fu.id, fu.due_date)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors"
-                >
-                  <Clock className="w-3.5 h-3.5" /> Adiar 1 dia
-                </button>
-                <button
-                  onClick={() => setShowReschedule(v => !v)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors"
-                >
-                  <Calendar className="w-3.5 h-3.5" /> Reagendar
-                </button>
-                <button
-                  onClick={() => onMarkSent(fu.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition-colors"
-                >
-                  <Check className="w-3.5 h-3.5" /> Marcar enviado
-                </button>
-              </>
-            )}
-            {fu.status === 'enviado' && (
-              <button
-                onClick={() => onMarkResponded(fu.id)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium rounded-lg transition-colors"
-              >
-                <CheckCheck className="w-3.5 h-3.5" /> Marcar respondido
-              </button>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
-          {/* Reagendar inline */}
+          {/* Reschedule inline */}
           {showReschedule && (
             <div className="flex items-center gap-2 mt-3">
-              <input
-                type="datetime-local"
-                value={newDate}
-                onChange={e => setNewDate(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#c9a84c]"
-              />
-              <button
-                onClick={() => { if (newDate) { onReschedule(fu.id, new Date(newDate).toISOString()); setShowReschedule(false); } }}
-                className="px-3 py-1.5 bg-[#c9a84c] text-white text-xs font-medium rounded-lg hover:bg-[#b8923f]"
-              >
-                Salvar
-              </button>
+              <input type="datetime-local" value={newDate} onChange={e => setNewDate(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#c9a84c]" />
+              <button onClick={() => { if (newDate) { onReschedule(fu.id, new Date(newDate).toISOString()); setShowReschedule(false); } }}
+                className="px-3 py-1.5 bg-[#c9a84c] text-white text-xs font-medium rounded-lg hover:bg-[#b8923f]">Salvar</button>
               <button onClick={() => setShowReschedule(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
             </div>
           )}
         </div>
-
-        {/* Status badge (direita) */}
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-          fu.status === 'enviado' ? 'bg-blue-50 text-blue-600'
-          : fu.status === 'respondido' ? 'bg-emerald-50 text-emerald-700'
-          : fu.status === 'ignorado' ? 'bg-gray-100 text-gray-400'
-          : isOverdue ? 'bg-red-50 text-red-600'
-          : 'bg-amber-50 text-amber-700'
-        }`}>
-          {fu.status === 'pendente' ? (isOverdue ? 'ATRASADO' : 'PENDENTE') : fu.status.toUpperCase()}
-        </span>
       </div>
     </div>
   );

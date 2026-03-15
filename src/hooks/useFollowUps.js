@@ -31,15 +31,18 @@ async function sbPost(table, body) {
   return r.json();
 }
 
-// Flatten the joined crm_leads data onto the follow_up object
+// Flatten the joined crm_leads + properties data onto the follow_up object
 function flattenFollowUp(f) {
   const lead = f.crm_leads || {};
+  const prop = lead.properties || {};
   return {
     ...f,
     lead_name: lead.name || '',
     lead_phone: lead.phone || '',
     temperatura: lead.temperatura || '',
     lead_stage: lead.stage || '',
+    property_title: prop.title || '',
+    property_neighborhood: prop.neighborhood || '',
     crm_leads: undefined,
   };
 }
@@ -56,8 +59,8 @@ export function useFollowUps(session) {
     setIsLoading(true);
     try {
       const [fusRaw, tpls, settings, leadsRaw] = await Promise.all([
-        // JOIN with crm_leads to get name, phone, temperatura, stage
-        sbGet('follow_ups?order=due_date.asc&select=*,crm_leads!lead_uuid(name,phone,temperatura,stage)'),
+        // JOIN with crm_leads + nested properties
+        sbGet('follow_ups?order=due_date.asc&select=*,crm_leads!lead_uuid(name,phone,temperatura,stage,properties!property_id(title,neighborhood))'),
         sbGet('follow_up_templates?is_active=eq.true&order=cadence_day.asc&select=*'),
         sbGet('admin_settings?key=eq.uazapi_token&select=value'),
         sbGet('crm_leads?select=id,name,phone,temperatura,stage&order=name.asc&limit=200'),
