@@ -1228,10 +1228,23 @@ export default function App() {
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   const [uazConfig, setUazConfig] = useState({ url: '', token: '' });
-  const googleCal = useGoogleCalendar();
+  // useGoogleCalendar stub to avoid re-render loop
+  const googleCal = useMemo(() => ({
+    clientId: localStorage.getItem('googleCalendarClientId') || '',
+    saveClientId: (id) => localStorage.setItem('googleCalendarClientId', id),
+    isConnected: false, isLoading: false, accessToken: '',
+    userName: '', userEmail: '',
+    connect: async () => { throw new Error('Configure o Client ID primeiro'); },
+    disconnect: () => {},
+    ensureToken: async () => '',
+    listEvents: async () => [],
+    createEvent: async () => '',
+    deleteEvent: async () => {},
+  }), []);
   const [agendaModalData, setAgendaModalData] = useState(null);
 
   const [toast, setToastState] = useState(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const setToast = (data) => {
     setToastState(data);
     clearTimeout(toastTimeout);
@@ -1272,23 +1285,41 @@ export default function App() {
     });
 
     const loadSupabase = async () => {
+      console.log('Iniciando carregamento do Supabase...');
       try {
         if (!window.supabase) {
+          console.log('Script do Supabase não encontrado, carregando via CDN...');
           await new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-            script.onload = resolve;
-            script.onerror = () => reject(new Error('Falha ao carregar Supabase'));
+            script.onload = () => {
+              console.log('Script do Supabase carregado com sucesso.');
+              resolve();
+            };
+            script.onerror = () => {
+              console.error('Falha ao carregar o script do Supabase via CDN.');
+              reject(new Error('Falha ao carregar Supabase'));
+            };
             document.head.appendChild(script);
+            // Timeout para não ficar preso se o CDN demorar demais
+            setTimeout(() => reject(new Error('Timeout ao carregar Supabase')), 10000);
           });
         }
-        if (!supabase) {
+        
+        if (window.supabase && !supabase) {
+          console.log('Criando cliente Supabase...');
           supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+          console.log('Cliente Supabase criado com sucesso.');
+        } else if (!window.supabase) {
+          throw new Error('Objeto window.supabase não disponível após carregamento do script.');
         }
+        
         setIsReady(true);
       } catch (error) {
-        console.error(error);
-        setToast({ message: 'Erro ao inicializar banco de dados.', type: 'error' });
+        console.error('Erro na inicialização do Supabase:', error);
+        setToast({ message: 'Erro ao conectar com o banco de dados. Verifique sua conexão.', type: 'error' });
+        // Forçar isReady para true após erro para permitir que o app renderize (com limitações) em vez de tela branca
+        setIsReady(true); 
       }
     };
 
@@ -1406,7 +1437,18 @@ export default function App() {
     }).catch(() => {});
   }, [session]);
 
-  if (!isReady || loadingAuth) return <div className="min-h-screen flex items-center justify-center bg-[#FAF8F5]"><Loader2 className="w-10 h-10 animate-spin text-[#C4A265]" /></div>;
+  if (!isReady || loadingAuth) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF8F5]">
+        <Loader2 className="w-12 h-12 animate-spin text-[#C4A265] mb-4" />
+        <p className="text-[#8A8A8A] font-medium animate-pulse">Iniciando Viva Beiramar...</p>
+        {/* Fallback caso demore muito */}
+        <div className="mt-8 text-[10px] text-[#8A8A8A]">
+          Se o carregamento demorar mais de 10 segundos, tente recarregar a página.
+        </div>
+      </div>
+    );
+  }
 
   if (!session) {
     return (
@@ -1431,8 +1473,6 @@ export default function App() {
       </div>
     );
   }
-
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const NavItem = ({ icon: Icon, label, route, badge, alert }) => (
     <button
