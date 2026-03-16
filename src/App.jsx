@@ -216,6 +216,7 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
   const [view, setView] = useState('kanban');
   const [searchTerm, setSearchTerm] = useState('');
   const [deals, setDeals] = useState([]);
+  const [mobileStageIdx, setMobileStageIdx] = useState(0);
   const [dealModal, setDealModal] = useState(null);
   const [draggedLead, setDraggedLead] = useState(null);
   const [dragOverStage, setDragOverStage] = useState(null);
@@ -374,7 +375,81 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
 
       <div className="flex-1 overflow-hidden relative">
         {view === 'kanban' ? (
-          <div className="flex h-full overflow-x-auto pb-4 gap-4 hide-scrollbar items-start">
+          <>
+          {/* Mobile kanban — one column at a time */}
+          <div className="md:hidden h-full flex flex-col">
+            <div className="flex items-center justify-between px-2 py-2 bg-white border-b border-[#E8E2D8]">
+              <button onClick={() => setMobileStageIdx(i => Math.max(0, i - 1))}
+                disabled={mobileStageIdx === 0}
+                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30">
+                <ChevronLeft className="w-5 h-5 text-[#1B2B3A]" />
+              </button>
+              <div className="text-center">
+                <span className="font-semibold text-[#1B2B3A] text-sm">{KANBAN_STAGES[mobileStageIdx]}</span>
+                <span className="ml-2 text-xs text-[#8A8A8A]">({filteredLeads.filter(l => l.stage === KANBAN_STAGES[mobileStageIdx]).length})</span>
+                {(() => {
+                  const sum = filteredLeads.filter(l => l.stage === KANBAN_STAGES[mobileStageIdx]).reduce((s, l) => {
+                    const d = getDealForLead(l); return s + (d ? Number(d.deal_value) || 0 : 0);
+                  }, 0);
+                  return sum > 0 ? <p className="text-[10px] text-[#C4A265]">{formatCurrency(sum)}</p> : null;
+                })()}
+              </div>
+              <button onClick={() => setMobileStageIdx(i => Math.min(KANBAN_STAGES.length - 1, i + 1))}
+                disabled={mobileStageIdx === KANBAN_STAGES.length - 1}
+                className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30">
+                <ChevronRight className="w-5 h-5 text-[#1B2B3A]" />
+              </button>
+            </div>
+            <div className="flex gap-1 justify-center py-1.5 bg-white border-b border-[#E8E2D8]">
+              {KANBAN_STAGES.map((_, i) => (
+                <button key={i} onClick={() => setMobileStageIdx(i)}
+                  className={`w-2 h-2 rounded-full transition-colors ${i === mobileStageIdx ? 'bg-[#C4A265]' : 'bg-gray-200'}`} />
+              ))}
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {filteredLeads.filter(l => l.stage === KANBAN_STAGES[mobileStageIdx]).map(lead => {
+                const deal = getDealForLead(lead);
+                return (
+                  <div key={lead.id}
+                    className="bg-white p-4 rounded-xl shadow-sm border border-[#E8E2D8]"
+                    onClick={() => setDealModal({ lead, deal })}>
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-bold text-[#1B2B3A] text-sm">{lead.name}</h4>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${TEMP_COLORS[lead.temperatura] || 'bg-slate-200 text-slate-800'}`}>{lead.temperatura}</span>
+                    </div>
+                    {deal ? (
+                      <div className="mb-2 space-y-1">
+                        {deal.property_title && <p className="text-[11px] text-[#5A5A5A]">{deal.property_title}</p>}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#C4A265]">{formatCurrency(deal.deal_value)}</span>
+                          {deal.probability != null && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${deal.probability >= 70 ? 'bg-green-50 text-green-700' : deal.probability >= 40 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{deal.probability}%</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#5A5A5A] mb-2"><Phone className="w-3 h-3 inline mr-1" />{formatPhone(lead.phone)}</p>
+                    )}
+                    <div className="flex gap-2 pt-2 border-t border-[#E8E2D8]">
+                      <Button variant="outlineGray" className="flex-1 py-2 text-xs" onClick={(e) => { e.stopPropagation(); openAgendaModal({ lead_id: lead.id, lead_uuid: lead.id, lead_name: lead.name, lead_phone: lead.phone }); }}>
+                        <CalendarDays className="w-3 h-3 mr-1" /> Agendar
+                      </Button>
+                      {lead.phone && (
+                        <a href={`https://wa.me/${lead.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="flex-1 py-2 text-xs font-medium inline-flex items-center justify-center rounded-lg border border-[#25D366] text-[#25D366] hover:bg-[#25D366] hover:text-white transition-colors">
+                          <MessageSquare className="w-3 h-3 mr-1" /> WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredLeads.filter(l => l.stage === KANBAN_STAGES[mobileStageIdx]).length === 0 && (
+                <p className="text-center text-sm text-[#8A8A8A] py-8">Nenhum lead nesta etapa</p>
+              )}
+            </div>
+          </div>
+          {/* Desktop kanban — horizontal scroll */}
+          <div className="hidden md:flex h-full overflow-x-auto pb-4 gap-4 hide-scrollbar items-start">
             {KANBAN_STAGES.map(stage => {
               const stageLeads = filteredLeads.filter(l => l.stage === stage);
               const stageDealsSum = stageLeads.reduce((sum, l) => {
@@ -463,9 +538,11 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
               );
             })}
           </div>
+          </>
         ) : (
-          <div className="bg-white rounded-xl border border-[#E8E2D8] overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white rounded-xl border border-[#E8E2D8] overflow-hidden overflow-x-auto">
+            {/* Desktop table — hidden on mobile, cards shown instead */}
+            <table className="w-full text-sm hidden md:table">
               <thead>
                 <tr className="border-b border-[#E8E2D8] bg-[#FAF8F5]">
                   <th className="text-left px-4 py-3 text-xs font-medium text-[#8A8A8A]">Lead</th>
@@ -495,7 +572,24 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
                 })}
               </tbody>
             </table>
-            {filteredLeads.length === 0 && <p className="p-6 text-center text-[#8A8A8A]">Nenhum lead encontrado.</p>}
+            {filteredLeads.length === 0 && <p className="p-6 text-center text-[#8A8A8A] hidden md:block">Nenhum lead encontrado.</p>}
+            {/* Mobile list — cards */}
+            <div className="md:hidden divide-y divide-[#E8E2D8]">
+              {filteredLeads.map(lead => {
+                const deal = getDealForLead(lead);
+                return (
+                  <div key={lead.id} className="p-4 hover:bg-gray-50" onClick={() => setDealModal({ lead, deal })}>
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium text-[#1B2B3A] text-sm">{lead.name}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${TEMP_COLORS[lead.temperatura] || 'bg-slate-200 text-slate-800'}`}>{lead.temperatura}</span>
+                    </div>
+                    <p className="text-xs text-[#8A8A8A]">{formatPhone(lead.phone)} · {lead.stage}</p>
+                    {deal && <p className="text-xs text-[#C4A265] font-medium mt-1">{formatCurrency(deal.deal_value)} · {deal.property_title}</p>}
+                  </div>
+                );
+              })}
+              {filteredLeads.length === 0 && <p className="p-6 text-center text-[#8A8A8A]">Nenhum lead encontrado.</p>}
+            </div>
           </div>
         )}
       </div>
@@ -1162,6 +1256,13 @@ export default function App() {
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
       @keyframes scaleIn { from { opacity: 0.95; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+      @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      .animate-slide-up { animation: slideUp 0.25s ease-out; }
+      .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+      @media (max-width: 767px) {
+        input, textarea, select { font-size: 16px !important; min-height: 44px; }
+        .modal-mobile { position: fixed !important; inset: 0 !important; border-radius: 0 !important; max-width: 100% !important; max-height: 100% !important; width: 100% !important; }
+      }
     `;
     document.head.appendChild(style);
 
@@ -1331,6 +1432,8 @@ export default function App() {
     );
   }
 
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+
   const NavItem = ({ icon: Icon, label, route, badge, alert }) => (
     <button
       onClick={() => { setCurrentRoute(route); setIsMobileMenuOpen(false); }}
@@ -1345,6 +1448,25 @@ export default function App() {
     </button>
   );
 
+  // Bottom tab item for mobile
+  const BottomTab = ({ icon: Icon, label, route, badge }) => {
+    const active = currentRoute === route;
+    return (
+      <button onClick={() => { setCurrentRoute(route); setShowMoreMenu(false); }}
+        className={`flex flex-col items-center justify-center flex-1 py-1.5 relative min-w-[48px] min-h-[48px] ${active ? 'text-[#C4A265]' : 'text-[#94A3B8]'}`}>
+        <Icon className="w-5 h-5" />
+        <span className="text-[10px] mt-0.5 font-medium">{label}</span>
+        {badge > 0 && <span className="absolute top-0.5 right-[calc(50%-16px)] bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>}
+      </button>
+    );
+  };
+
+  const ROUTE_TITLES = {
+    dashboard: 'Dashboard', crm: 'Gestão de Leads', followups: 'Follow-ups',
+    conversas: 'Conversas', agenda: 'Agenda', properties: 'Imóveis',
+    comissoes: 'Comissões', relatorios: 'Relatórios', settings: 'Configurações',
+  };
+
   return (
     <div className="min-h-screen flex bg-[#FAF8F5]">
       {toast && <Toast {...toast} onClose={() => setToastState(null)} />}
@@ -1358,10 +1480,8 @@ export default function App() {
         />
       )}
 
-      {isMobileMenuOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-
-      {/* SIDEBAR */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#1B2B3A] text-white flex flex-col transition-transform transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:flex-shrink-0`}>
+      {/* DESKTOP SIDEBAR (hidden on mobile) */}
+      <aside className="hidden md:flex w-64 bg-[#1B2B3A] text-white flex-col flex-shrink-0">
         <div className="p-6 flex items-center space-x-3">
           <img src="/logo-viva-beiramar.png" alt="Viva Beiramar" className="w-10 h-10 rounded-full" />
           <span className="text-xl font-bold font-serif tracking-wide">Viva Beiramar</span>
@@ -1380,9 +1500,7 @@ export default function App() {
         <div className="p-4 border-t border-white/10">
           <div className="flex items-center space-x-3 px-4 py-3">
             <div className="w-8 h-8 rounded-full bg-[#C4A265] text-[#1B2B3A] flex items-center justify-center font-bold text-sm">A</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">Admin</p>
-            </div>
+            <div className="flex-1 min-w-0"><p className="text-sm font-medium text-white truncate">Admin</p></div>
             <button onClick={handleLogout} className="text-[#94A3B8] hover:text-red-400 transition-colors" title="Sair"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
@@ -1391,28 +1509,29 @@ export default function App() {
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative">
         {upcomingAppointment && (
-          <div className="bg-[#1B2B3A] text-[#FAF8F5] px-4 py-2 text-sm flex justify-center items-center gap-3 fade-in">
-            <Bell className="w-4 h-4 text-[#C4A265] animate-bounce" />
-            <span><strong className="text-[#C4A265]">Agendamento Próximo:</strong> {upcomingAppointment.title} às {new Date(upcomingAppointment.start_time).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
-            <button onClick={() => setAgendaModalData(upcomingAppointment)} className="underline font-bold text-xs hover:text-[#C4A265]">Ver detalhes</button>
+          <div className="bg-[#1B2B3A] text-[#FAF8F5] px-4 py-2 text-xs md:text-sm flex justify-center items-center gap-2 md:gap-3 fade-in">
+            <Bell className="w-4 h-4 text-[#C4A265] animate-bounce flex-shrink-0" />
+            <span className="truncate"><strong className="text-[#C4A265]">Próximo:</strong> {upcomingAppointment.title} às {new Date(upcomingAppointment.start_time).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>
+            <button onClick={() => setAgendaModalData(upcomingAppointment)} className="underline font-bold text-xs hover:text-[#C4A265] flex-shrink-0">Ver</button>
           </div>
         )}
 
-        <header className="bg-white border-b border-[#E8E2D8] h-16 flex items-center px-4 md:px-8 justify-between flex-shrink-0">
-          <div className="flex items-center">
-            <button className="md:hidden mr-4 text-[#1B2B3A]" onClick={() => setIsMobileMenuOpen(true)}>
-              <Menu className="w-6 h-6" />
-            </button>
-            <h1 className="text-xl font-bold font-serif text-[#1B2B3A] capitalize">
-              {currentRoute === 'crm' ? 'Gestão de Leads' : currentRoute === 'properties' ? 'Imóveis' : currentRoute}
+        {/* Header — simplified on mobile */}
+        <header className="bg-white border-b border-[#E8E2D8] h-14 md:h-16 flex items-center px-4 md:px-8 justify-between flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <img src="/logo-viva-beiramar.png" alt="" className="w-8 h-8 rounded-full md:hidden" />
+            <h1 className="text-lg md:text-xl font-bold font-serif text-[#1B2B3A]">
+              {ROUTE_TITLES[currentRoute] || currentRoute}
             </h1>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-3">
             {isLoadingData && <Loader2 className="w-5 h-5 animate-spin text-[#C4A265]" />}
+            <button onClick={handleLogout} className="md:hidden text-[#94A3B8] hover:text-red-400" title="Sair"><LogOut className="w-5 h-5" /></button>
           </div>
         </header>
 
-        <div className={`flex-1 overflow-auto relative ${currentRoute === 'conversas' ? 'p-2 md:p-6' : 'p-4 md:p-8'}`}>
+        {/* Page content — padded, with bottom space for mobile nav */}
+        <div className={`flex-1 overflow-auto relative ${currentRoute === 'conversas' ? 'p-0 md:p-6' : 'p-3 md:p-8'} pb-20 md:pb-8`}>
           {currentRoute === 'dashboard' && <CockpitDashboard session={session} />}
           {currentRoute === 'crm' && <CRM leads={leads} properties={properties} updateLead={updateLeadInState} setToast={setToast} reloadData={loadData} openAgendaModal={setAgendaModalData} />}
           {currentRoute === 'conversas' && <ConversasPage session={session} setCurrentRoute={setCurrentRoute} />}
@@ -1423,6 +1542,46 @@ export default function App() {
           {currentRoute === 'relatorios' && <RelatoriosPage session={session} />}
           {currentRoute === 'settings' && <SettingsPage uazConfig={uazConfig} setUazConfig={setUazConfig} googleCal={googleCal} setToast={setToast} />}
         </div>
+
+        {/* MOBILE BOTTOM NAV (hidden on desktop) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#E8E2D8] flex items-center z-50 safe-bottom">
+          <BottomTab icon={LayoutDashboard} label="Home" route="dashboard" />
+          <BottomTab icon={Users} label="CRM" route="crm" />
+          <BottomTab icon={MessageSquare} label="Chat" route="conversas" badge={3} />
+          <BottomTab icon={CalendarDays} label="Agenda" route="agenda" />
+          {/* More menu */}
+          <button onClick={() => setShowMoreMenu(v => !v)}
+            className={`flex flex-col items-center justify-center flex-1 py-1.5 min-w-[48px] min-h-[48px] ${showMoreMenu ? 'text-[#C4A265]' : 'text-[#94A3B8]'}`}>
+            <MoreVertical className="w-5 h-5" />
+            <span className="text-[10px] mt-0.5 font-medium">Mais</span>
+          </button>
+        </nav>
+
+        {/* "More" bottom sheet */}
+        {showMoreMenu && (
+          <>
+            <div className="md:hidden fixed inset-0 bg-black/30 z-40" onClick={() => setShowMoreMenu(false)} />
+            <div className="md:hidden fixed bottom-[56px] left-0 right-0 bg-white rounded-t-2xl shadow-xl z-50 p-4 safe-bottom animate-slide-up">
+              <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { icon: PhoneForwarded, label: 'Follow-ups', route: 'followups', badge: followupsBadge },
+                  { icon: Home, label: 'Imóveis', route: 'properties' },
+                  { icon: DollarSign, label: 'Comissões', route: 'comissoes' },
+                  { icon: BarChart3, label: 'Relatórios', route: 'relatorios' },
+                  { icon: Settings, label: 'Config', route: 'settings' },
+                ].map(item => (
+                  <button key={item.route} onClick={() => { setCurrentRoute(item.route); setShowMoreMenu(false); }}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-colors relative ${currentRoute === item.route ? 'bg-[#C4A265]/10 text-[#C4A265]' : 'text-[#5A5A5A] hover:bg-gray-50'}`}>
+                    <item.icon className="w-5 h-5" />
+                    <span className="text-[10px] font-medium">{item.label}</span>
+                    {item.badge > 0 && <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{item.badge > 9 ? '9+' : item.badge}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
