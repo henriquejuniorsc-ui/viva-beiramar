@@ -213,11 +213,11 @@ export default function PropertyFormModal({ property, onClose, onCreate, onUpdat
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex justify-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-2xl h-full overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full md:max-w-2xl h-full overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="sticky top-0 bg-white z-10 border-b border-[#E8E2D8] px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-[#1B2B3A] font-serif">{isEdit ? 'Editar Imóvel' : 'Novo Imóvel'}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+        <div className="sticky top-0 bg-white z-10 border-b border-[#E8E2D8] px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
+          <h2 className="text-base md:text-lg font-bold text-[#1B2B3A] font-serif">{isEdit ? 'Editar Imóvel' : 'Novo Imóvel'}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg min-w-[44px] min-h-[44px] flex items-center justify-center"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-6 space-y-4">
@@ -506,7 +506,7 @@ export default function PropertyFormModal({ property, onClose, onCreate, onUpdat
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t border-[#E8E2D8] px-6 py-4 flex items-center justify-between">
+        <div className="sticky bottom-0 bg-white border-t border-[#E8E2D8] px-4 md:px-6 py-3 md:py-4 flex items-center justify-between safe-bottom">
           <div>
             {isEdit && (
               <button onClick={handleDeleteProperty} className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1">

@@ -645,11 +645,11 @@ const DealModal = ({ lead, deal, properties, onClose, onSave }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar animate-scale-in" onClick={e => e.stopPropagation()}>
-        <div className="p-5 border-b border-[#E8E2D8] bg-[#FAF8F5] flex justify-between items-center sticky top-0 z-10">
+    <div className="fixed inset-0 z-[100] bg-black/50 md:backdrop-blur-sm flex items-end md:items-center justify-center md:p-4" onClick={onClose}>
+      <div className="bg-white w-full md:max-w-lg md:rounded-2xl rounded-t-2xl shadow-xl max-h-[95vh] md:max-h-[90vh] overflow-y-auto custom-scrollbar animate-scale-in" onClick={e => e.stopPropagation()}>
+        <div className="p-4 md:p-5 border-b border-[#E8E2D8] bg-[#FAF8F5] flex justify-between items-center sticky top-0 z-10 md:rounded-t-2xl">
           <div>
-            <h2 className="text-lg font-bold font-serif text-[#1B2B3A]">{deal ? 'Editar Negócio' : 'Novo Negócio'}</h2>
+            <h2 className="text-base md:text-lg font-bold font-serif text-[#1B2B3A]">{deal ? 'Editar Negócio' : 'Novo Negócio'}</h2>
             <p className="text-xs text-[#8A8A8A]">{lead.name} — {formatPhone(lead.phone)}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-[#E8E2D8] rounded-full"><X className="w-5 h-5" /></button>
@@ -847,7 +847,7 @@ const SettingsPage = ({ uazConfig, setUazConfig, googleCal, setToast }) => {
 // 6. AGENDA
 const Agenda = ({ appointments, setAppointments, leads, properties, googleCal, openAgendaModal, setToast }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState('month');
+  const [view, setView] = useState(typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'month');
   const [filterType, setFilterType] = useState('Todos');
   const isConnected = googleCal.isConnected;
 
@@ -1072,6 +1072,12 @@ const Agenda = ({ appointments, setAppointments, leads, properties, googleCal, o
       </div>
 
       {view === 'month' ? renderMonthView() : renderDayView()}
+
+      {/* FAB — new appointment (mobile only) */}
+      <button onClick={() => openAgendaModal({})}
+        className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-[#C4A265] text-white rounded-full shadow-lg flex items-center justify-center z-30 hover:bg-[#b89355] active:scale-95 transition-transform">
+        <Plus className="w-6 h-6" />
+      </button>
     </div>
   );
 };
@@ -1121,10 +1127,10 @@ const AppointmentModal = ({ initialData, onClose, onSave, leads, properties }) =
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[95vh] overflow-y-auto custom-scrollbar animate-scale-in">
-        <div className="p-6 border-b border-[#E8E2D8] bg-[#FAF8F5] flex justify-between items-center sticky top-0 z-10">
-          <h2 className="text-xl font-bold font-serif text-[#1B2B3A]">{isEdit ? 'Editar Compromisso' : 'Novo Agendamento'}</h2>
+    <div className="fixed inset-0 z-[100] bg-black/50 md:backdrop-blur-sm flex items-end md:items-center justify-center md:p-4">
+      <div className="bg-white w-full md:max-w-2xl md:rounded-2xl rounded-t-2xl shadow-xl max-h-[95vh] overflow-y-auto custom-scrollbar animate-scale-in">
+        <div className="p-4 md:p-6 border-b border-[#E8E2D8] bg-[#FAF8F5] flex justify-between items-center sticky top-0 z-10 md:rounded-t-2xl">
+          <h2 className="text-lg md:text-xl font-bold font-serif text-[#1B2B3A]">{isEdit ? 'Editar Compromisso' : 'Novo Agendamento'}</h2>
           <button onClick={onClose} className="p-2 hover:bg-[#E8E2D8] rounded-full transition-colors"><X className="w-5 h-5" /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
