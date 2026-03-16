@@ -91,22 +91,25 @@ function CommissionCard({ commission, rate, monthlyPct, isLoading }) {
 }
 
 // --- Metric Card ---
-function MetricCard({ Icon, iconColor, iconBg, label, value, sub, subColor, isLoading }) {
+function MetricCard({ Icon, iconColor, iconBg, label, labelShort, value, sub, subColor, isLoading }) {
   if (isLoading) return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 animate-pulse space-y-2">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 animate-pulse space-y-2">
       <div className="flex gap-3"><Skeleton w="w-9" h="h-9" /><div className="flex-1 space-y-2"><Skeleton /><Skeleton w="w-1/2" h="h-6" /></div></div>
     </div>
   );
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow">
-      <div className="flex items-start gap-3">
-        <div className={`p-2 rounded-lg flex-shrink-0 ${iconBg}`}>
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 hover:shadow-md transition-shadow">
+      <div className="flex items-start gap-2 sm:gap-3">
+        <div className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 ${iconBg}`}>
           <Icon className="w-4 h-4" style={{ color: iconColor }} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-500 uppercase tracking-wider font-medium truncate">{label}</p>
-          <p className="text-2xl font-medium text-gray-900 mt-0.5 tabular-nums">{value}</p>
-          <p className={`text-xs mt-1 truncate ${subColor || 'text-gray-500'}`}>{sub}</p>
+          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-tight sm:tracking-wider font-medium truncate">
+            {labelShort && <span className="sm:hidden">{labelShort}</span>}
+            <span className={labelShort ? 'hidden sm:inline' : ''}>{label}</span>
+          </p>
+          <p className="text-xl sm:text-2xl font-medium text-gray-900 mt-0.5 tabular-nums">{value}</p>
+          <p className={`text-[11px] sm:text-xs mt-0.5 sm:mt-1 truncate ${subColor || 'text-gray-500'}`}>{sub}</p>
         </div>
       </div>
     </div>
@@ -327,17 +330,17 @@ export default function CockpitDashboard({ session }) {
       )}
 
       {/* Cards dourados */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         <PipelineCard total={m?.pipeline_total ?? 0} changePct={m?.pipeline_change_pct ?? 0} isLoading={isLoading} />
         <CommissionCard commission={m?.commission_potential ?? 0} rate={m?.commission_rate ?? 0.03} monthlyPct={m?.monthly_pct ?? 0} isLoading={isLoading} />
       </div>
 
       {/* 4 Métricas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard Icon={TrendingUp} iconColor="#378ADD" iconBg="bg-blue-50" label="Fechamentos Previstos" value={m?.closings_predicted ?? 0} sub={`${m?.proposals_accepted ?? 0} com proposta aceita`} isLoading={isLoading} />
-        <MetricCard Icon={Home} iconColor="#c9a84c" iconBg="bg-amber-50" label="Visitas esta semana" value={m?.visits_this_week ?? 0} sub="Agendadas na Agenda" isLoading={isLoading} />
-        <MetricCard Icon={PhoneForwarded} iconColor={followColor} iconBg={followBg} label="Follow-ups pendentes" value={m?.followups_pending ?? 0} sub={m && m.followups_overdue > 0 ? `${m.followups_overdue} atrasados +3 dias` : 'Em dia ✓'} subColor={m && m.followups_pending > 0 ? 'text-[#E24B4A]' : 'text-gray-400'} isLoading={isLoading} />
-        <MetricCard Icon={Clock} iconColor={respColor} iconBg="bg-gray-50" label="Tempo médio resposta" value={`${m?.avg_response_time_min ?? 0}min`} sub="Bia responde em <10s" isLoading={isLoading} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        <MetricCard Icon={TrendingUp} iconColor="#378ADD" iconBg="bg-blue-50" label="Fechamentos Previstos" labelShort="Fecham." value={m?.closings_predicted ?? 0} sub={`${m?.proposals_accepted ?? 0} com proposta`} isLoading={isLoading} />
+        <MetricCard Icon={Home} iconColor="#c9a84c" iconBg="bg-amber-50" label="Visitas esta semana" labelShort="Visitas" value={m?.visits_this_week ?? 0} sub="Na Agenda" isLoading={isLoading} />
+        <MetricCard Icon={PhoneForwarded} iconColor={followColor} iconBg={followBg} label="Follow-ups pendentes" labelShort="Follow-ups" value={m?.followups_pending ?? 0} sub={m && m.followups_overdue > 0 ? `${m.followups_overdue} atrasados` : 'Em dia ✓'} subColor={m && m.followups_pending > 0 ? 'text-[#E24B4A]' : 'text-gray-400'} isLoading={isLoading} />
+        <MetricCard Icon={Clock} iconColor={respColor} iconBg="bg-gray-50" label="Tempo médio resposta" labelShort="T. Resposta" value={`${m?.avg_response_time_min ?? 0}min`} sub="WhatsApp" isLoading={isLoading} />
       </div>
 
       {/* Meta mensal */}
