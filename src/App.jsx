@@ -375,9 +375,9 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
 
       <div className="flex-1 overflow-hidden relative">
         {view === 'kanban' ? (
-          <>
+          <div key="kanban-view" className="h-full flex flex-col">
           {/* Mobile kanban — one column at a time */}
-          <div className="md:hidden h-full flex flex-col">
+          <div className="md:hidden flex-1 flex flex-col">
             <div className="flex items-center justify-between px-2 py-2 bg-white border-b border-[#E8E2D8]">
               <button onClick={() => setMobileStageIdx(i => Math.max(0, i - 1))}
                 disabled={mobileStageIdx === 0}
@@ -538,9 +538,9 @@ const CRM = ({ leads, properties, updateLead, setToast, reloadData, openAgendaMo
               );
             })}
           </div>
-          </>
+          </div>
         ) : (
-          <div className="bg-white rounded-xl border border-[#E8E2D8] overflow-hidden overflow-x-auto">
+          <div key="list-view" className="bg-white rounded-xl border border-[#E8E2D8] overflow-hidden overflow-x-auto">
             {/* Desktop table — hidden on mobile, cards shown instead */}
             <table className="w-full text-sm hidden md:table">
               <thead>
